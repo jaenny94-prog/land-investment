@@ -1,0 +1,1787 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>토지 악재와 호재: 땅 투자의 신 (Land Investment Simulator)</title>
+  
+  <!-- Tailwind CSS & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- PWA & Mobile Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0f172a">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cadastral: {
+              land: '#fef3c7',
+              road: '#94a3b8',
+              buffer: '#15803d',
+              ditch: '#0284c7',
+              sea: '#0369a1',
+              boundary: '#dc2626'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+    * { font-family: 'Pretendard', sans-serif; -webkit-tap-highlight-color: transparent; }
+    
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+    /* Canvas styling */
+    canvas { touch-action: none; image-rendering: -webkit-optimize-contrast; }
+
+    .pulse-glow {
+      animation: pulseGlow 2s infinite alternate;
+    }
+    @keyframes pulseGlow {
+      from { box-shadow: 0 0 10px rgba(16, 185, 129, 0.2); }
+      to { box-shadow: 0 0 25px rgba(16, 185, 129, 0.6); }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen overflow-hidden select-none">
+
+  <!-- TOP STATUS BAR: Player Finances & Turn Tracker -->
+  <header class="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-lg z-20">
+    <div class="flex items-center gap-3">
+      <div class="bg-gradient-to-tr from-emerald-600 to-teal-500 p-2 rounded-xl text-white shadow-md">
+        <i class="fa-solid fa-mountain-city text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+          땅 투자의 신 <span class="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full font-mono">PRO 실무판</span>
+        </h1>
+        <p class="text-[11px] text-slate-400" id="header-turn-display">2026년 1년차 · <span class="text-amber-400 font-semibold">봄(Spring)</span></p>
+      </div>
+    </div>
+
+    <!-- Live Financial Indicators -->
+    <div class="flex items-center gap-4 text-xs">
+      <div class="bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60 flex items-center gap-2">
+        <i class="fa-solid fa-coins text-amber-400"></i>
+        <div>
+          <span class="text-[10px] text-slate-400 block leading-tight">가용 자본금</span>
+          <span class="font-bold font-mono text-white text-xs" id="capital-display">5억 0,000만 원</span>
+        </div>
+      </div>
+      <div class="bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60 flex items-center gap-2">
+        <i class="fa-solid fa-scale-balanced text-rose-400"></i>
+        <div>
+          <span class="text-[10px] text-slate-400 block leading-tight">부채 (DSR 규제)</span>
+          <span class="font-bold font-mono text-rose-300 text-xs" id="debt-display">0원 (DSR 0%)</span>
+        </div>
+      </div>
+      <div class="bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60 hidden sm:flex items-center gap-2">
+        <i class="fa-solid fa-map-location-dot text-emerald-400"></i>
+        <div>
+          <span class="text-[10px] text-slate-400 block leading-tight">보유 토지</span>
+          <span class="font-bold font-mono text-emerald-300 text-xs" id="land-count-display">0필지</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons: PWA Install, Sound, Lexicon, Next Turn -->
+    <div class="flex items-center gap-2">
+      <button id="btn-install-pwa" class="hidden text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1.5 rounded-lg font-medium shadow items-center gap-1.5 transition">
+        <i class="fa-solid fa-download"></i> <span class="hidden md:inline">앱 설치</span>
+      </button>
+      <button id="btn-codex" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-book-bookmark text-amber-400"></i> <span class="hidden md:inline">공법 사전</span>
+      </button>
+      <button id="btn-mute" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 p-2 rounded-lg transition" title="효과음 켜기/끄기">
+        <i class="fa-solid fa-volume-high text-emerald-400" id="sound-icon"></i>
+      </button>
+      <button id="btn-advance-turn" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-bold shadow-lg shadow-emerald-900/40 flex items-center gap-1.5 transition active:scale-95">
+        <span>다음 분기 (보유 경과)</span> <i class="fa-solid fa-arrow-right"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE: Split Layout (Left: Cadastral Graphic View, Right: Workflow Simulator) -->
+  <main class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+    <!-- LEFT PANEL: Cadastral Visual Engine (Map, Layers, Cross Section) -->
+    <section class="w-full lg:w-7/12 flex flex-col bg-slate-900/40 border-r border-slate-800 relative h-1/2 lg:h-full">
+      
+      <!-- Map Header & Layer Filter Bar -->
+      <div class="bg-slate-900/90 backdrop-blur px-3 py-2 border-b border-slate-800 flex items-center justify-between text-xs gap-2 shrink-0 z-10">
+        <div class="flex items-center gap-2 truncate">
+          <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30" id="current-parcel-tag">지적도 실시간 투시</span>
+          <span class="font-medium text-slate-300 truncate" id="current-parcel-title">매물 1: 경기 화성시 향남읍 발안리 124-3</span>
+        </div>
+        
+        <!-- Interactive Visual Layer Toggles -->
+        <div class="flex items-center gap-1 overflow-x-auto text-[11px]">
+          <button class="layer-toggle active px-2 py-1 rounded bg-slate-800 text-emerald-400 border border-emerald-500/40" data-layer="cadastral">
+            <i class="fa-solid fa-draw-polygon mr-1"></i>지적도
+          </button>
+          <button class="layer-toggle px-2 py-1 rounded bg-slate-800/60 text-slate-400 border border-slate-700" data-layer="regulation">
+            <i class="fa-solid fa-shield-halved mr-1"></i>규제/완충녹지
+          </button>
+          <button class="layer-toggle px-2 py-1 rounded bg-slate-800/60 text-slate-400 border border-slate-700" data-layer="topo">
+            <i class="fa-solid fa-mound mr-1"></i>경사/지형
+          </button>
+          <button class="layer-toggle px-2 py-1 rounded bg-slate-800/60 text-slate-400 border border-slate-700" data-layer="infra">
+            <i class="fa-solid fa-faucet-drip mr-1"></i>오수/구거
+          </button>
+        </div>
+      </div>
+
+      <!-- Graphical Canvas Container -->
+      <div class="relative flex-1 w-full h-full bg-[#0b1120] overflow-hidden flex items-center justify-center">
+        <canvas id="cadastralCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+        
+        <!-- On-Screen HUD Overlay: Land Metric Legends & Inspection Indicators -->
+        <div class="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur-md p-3 rounded-xl border border-slate-700/70 text-xs shadow-xl space-y-1.5 pointer-events-none max-w-xs">
+          <div class="flex items-center justify-between gap-4">
+            <span class="text-slate-400">지목 / 용도지역:</span>
+            <span class="font-bold text-amber-300 font-mono" id="hud-zoning">전(田) / 자연녹지지역</span>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <span class="text-slate-400">공부상 면적 / 실측:</span>
+            <span class="font-bold text-white font-mono" id="hud-area">1,650㎡ (499평)</span>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <span class="text-slate-400">접도 조건 (도로):</span>
+            <span class="font-bold font-mono" id="hud-road">대로변 (완충녹지 접면)</span>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <span class="text-slate-400">환경·지반 현황:</span>
+            <span class="font-bold font-mono" id="hud-env">동결 지표면 (영하 9℃)</span>
+          </div>
+        </div>
+
+        <!-- Season / Weather Indicator Badge -->
+        <div class="absolute top-3 left-3 px-3 py-1.5 bg-slate-900/80 backdrop-blur border border-slate-700 rounded-lg text-xs flex items-center gap-2 pointer-events-none">
+          <span id="hud-season-icon"><i class="fa-solid fa-snowflake text-cyan-300"></i></span>
+          <span class="font-semibold text-slate-200" id="hud-season-label">겨울철 결빙기 (하자 은폐 주의)</span>
+        </div>
+
+        <!-- Compass Rose -->
+        <div class="absolute top-3 right-3 w-9 h-9 rounded-full bg-slate-900/80 border border-slate-700 flex flex-col items-center justify-center text-[10px] font-bold text-slate-300 pointer-events-none shadow">
+          <span class="text-rose-400 leading-none">N</span>
+          <i class="fa-solid fa-location-arrow text-[10px] rotate-[-45deg] text-slate-400"></i>
+        </div>
+      </div>
+
+      <!-- Quick Inspection Mini-Tools Bar -->
+      <div class="bg-slate-900/90 border-t border-slate-800 p-2 flex items-center justify-between gap-2 text-xs shrink-0 overflow-x-auto">
+        <div class="flex items-center gap-1.5 text-slate-300">
+          <span class="text-[11px] text-slate-400 font-medium">임장 조사도구:</span>
+          <button id="tool-drill" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-slate-200 transition flex items-center gap-1">
+            <i class="fa-solid fa-bore-hole text-amber-400"></i> 지반 샘플링(시추)
+          </button>
+          <button id="tool-survey" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-slate-200 transition flex items-center gap-1">
+            <i class="fa-solid fa-compass-drafting text-blue-400"></i> 경계복원측량
+          </button>
+          <button id="tool-drone" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-slate-200 transition flex items-center gap-1">
+            <i class="fa-solid fa-paper-plane text-emerald-400"></i> 드론 경사도/입목
+          </button>
+        </div>
+        <span class="text-[11px] text-slate-400 hidden sm:inline" id="inspection-count-text">조사 진행률: 0/3 완료</span>
+      </div>
+    </section>
+
+    <!-- RIGHT PANEL: Decision Engine, 4-Choice Quizzes, Transaction Office, Holdings Ledger -->
+    <section class="w-full lg:w-5/12 flex flex-col bg-slate-950 overflow-hidden h-1/2 lg:h-full">
+      
+      <!-- Stage Navigation Tabs -->
+      <div class="bg-slate-900/60 border-b border-slate-800 px-3 pt-2 flex items-center gap-2 shrink-0">
+        <button class="nav-tab active px-3 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 flex items-center gap-1.5 transition" data-view="quiz">
+          <i class="fa-solid fa-circle-question"></i> 심층 의사결정 (4지선다)
+        </button>
+        <button class="nav-tab px-3 py-2 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition" data-view="inventory">
+          <i class="fa-solid fa-folder-tree"></i> 나의 보유토지 및 관리
+        </button>
+        <button class="nav-tab px-3 py-2 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition" data-view="market">
+          <i class="fa-solid fa-shop"></i> 토지 매물 리스트
+        </button>
+      </div>
+
+      <!-- Tab Content 1: Quiz & Stage Decision (Main Pedagogical Gameplay) -->
+      <div id="view-quiz" class="flex-1 overflow-y-auto p-4 space-y-4">
+        
+        <!-- Stage Badge and Progress Bar -->
+        <div class="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-slate-800">
+          <div>
+            <span class="text-[10px] uppercase font-bold text-emerald-400 tracking-wider block" id="quiz-stage-step">STAGE 1 : 임장 및 입지 분석</span>
+            <h2 class="text-sm font-bold text-white mt-0.5" id="quiz-title">완충녹지와 버스정류장의 함정 분석</h2>
+          </div>
+          <div class="text-right">
+            <span class="text-[11px] text-slate-400">토지 위험 등급</span>
+            <span class="block text-xs font-bold font-mono text-rose-400" id="quiz-risk-badge">HIGH RISK (인허가 위험)</span>
+          </div>
+        </div>
+
+        <!-- Scenario Context Narrative Card -->
+        <div class="bg-slate-900/70 p-3.5 rounded-xl border border-slate-800 text-xs leading-relaxed text-slate-300 space-y-2">
+          <div class="flex items-center gap-2 text-amber-400 font-bold text-[11px]">
+            <i class="fa-solid fa-triangle-exclamation"></i> 현장 임장 및 서류 브리핑
+          </div>
+          <p id="scenario-narrative">
+            겨울철 영하 8도의 눈 덮인 교외 왕복 4차선 대로변에 위치한 지목 '전(田)' 1,650㎡ 토지입니다. 토지 바로 앞에는 버스정류장 승강장이 설치되어 있고 부지는 평탄하게 흙이 채워져(성토) 있습니다. 매도인은 "대로변이라 대형 카페나 근린생활시설 건축이 즉시 가능하고 버스정류장 덕에 유동인구가 폭발할 것"이라며 급매가 4억 2천만 원을 요구하고 있습니다.
+          </p>
+          <div class="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between" id="scenario-price-strip">
+            <span>매매 희망가: <strong class="text-white font-mono">4억 2,000만 원</strong></span>
+            <span>공시지가 합계: <strong class="text-emerald-400 font-mono">2억 1,000만 원</strong></span>
+          </div>
+        </div>
+
+        <!-- The 4-Choice Hard Question Box -->
+        <div class="space-y-2.5">
+          <div class="text-xs font-bold text-slate-200 flex items-center justify-between">
+            <span id="quiz-question-heading"><i class="fa-solid fa-gavel text-emerald-400 mr-1.5"></i>핵심 공법 및 실무 리스크 판정</span>
+            <span class="text-[10px] text-slate-400">정답률 21% (고난도 실무)</span>
+          </div>
+
+          <!-- 4 Multiple Choice Options (Dynamically Rendered) -->
+          <div class="space-y-2" id="quiz-options-container">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- Pedagogical Feedback & Result Card (Appears after answer) -->
+        <div id="quiz-feedback-box" class="hidden bg-slate-900 border rounded-xl p-4 text-xs space-y-3 transition-all duration-300">
+          <div class="flex items-center justify-between">
+            <span class="font-bold flex items-center gap-1.5 text-sm" id="feedback-status">
+              <i class="fa-solid fa-circle-check text-emerald-400"></i> 판정 성공
+            </span>
+            <span class="text-[10px] px-2 py-0.5 rounded font-mono" id="feedback-badge">+경험치 및 자본 방어</span>
+          </div>
+          <p class="text-slate-300 leading-relaxed text-[12px]" id="feedback-explanation">
+            <!-- Full legal explanation injected here -->
+          </p>
+          <div class="pt-2 border-t border-slate-800 flex items-center justify-end gap-2" id="feedback-actions">
+            <!-- Next action buttons -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab Content 2: Owned Land Inventory & Operations (Holding, Taxes, Civil Works, Expropriation) -->
+      <div id="view-inventory" class="hidden flex-1 overflow-y-auto p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+            <i class="fa-solid fa-cubes text-emerald-400"></i> 내 보유 토지 포트폴리오
+          </h2>
+          <span class="text-[11px] text-slate-400" id="inventory-summary-text">총 보유: 0건 (평가총액: 0원)</span>
+        </div>
+
+        <div id="inventory-list-container" class="space-y-3">
+          <!-- Empty State or Land Cards -->
+          <div class="p-8 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
+            <i class="fa-solid fa-map text-3xl mb-2 text-slate-600 block"></i>
+            현재 취득하여 보유 중인 토지가 없습니다.<br>
+            매물 목록에서 적절한 땅을 탐색하고 계약을 체결하십시오.
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content 3: Land Market Browser -->
+      <div id="view-market" class="hidden flex-1 overflow-y-auto p-4 space-y-3">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+            <i class="fa-solid fa-signs-post text-amber-400"></i> 전국 토지 매물 리스트 (시나리오 선택)
+          </h2>
+          <span class="text-[11px] text-slate-400">총 6개 지역 시나리오</span>
+        </div>
+        <div id="market-list-container" class="space-y-2.5">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- MODAL: Custom Comprehensive Lexicon Modal (공법 & 악재/호재 백과사전) -->
+  <div id="modal-codex" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2">
+          <i class="fa-solid fa-graduation-cap text-amber-400"></i> 실전 토지 투자 공법 & 악재/호재 백과사전
+        </h3>
+        <button class="text-slate-400 hover:text-white close-modal p-1" data-modal="modal-codex">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="p-4 overflow-y-auto space-y-4 text-xs text-slate-300 leading-relaxed" id="codex-content">
+        <!-- Rendered rich legal content -->
+      </div>
+      <div class="p-3 border-t border-slate-800 bg-slate-950 flex justify-end">
+        <button class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-medium close-modal" data-modal="modal-codex">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Turn Advance Report & Random Event Modal (호재/악재 발생기) -->
+  <div id="modal-event" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between" id="event-header-box">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2" id="event-title">
+          <i class="fa-solid fa-bullhorn text-amber-400"></i> 분기 결산 및 돌발 사건 발생
+        </h3>
+        <button class="text-slate-400 hover:text-white close-modal p-1" data-modal="modal-event">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-3.5 text-xs">
+        <div class="p-3 rounded-xl border" id="event-content-box">
+          <p id="event-description" class="text-slate-200 leading-relaxed text-[12px]"></p>
+        </div>
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5 font-mono text-[11px]" id="event-financial-impact">
+          <!-- Financial delta -->
+        </div>
+      </div>
+      <div class="p-3 border-t border-slate-800 bg-slate-950 flex justify-end">
+        <button id="btn-event-confirm" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-lg">확인 및 장부 반영</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Custom Message Box (Replaces alert) -->
+  <div id="modal-toast" class="fixed bottom-5 right-5 max-w-sm z-50 pointer-events-none transition-all duration-300 opacity-0 translate-y-3">
+    <div class="bg-slate-900/95 border border-slate-700 text-white px-4 py-3 rounded-xl shadow-2xl flex items-start gap-3 backdrop-blur pointer-events-auto">
+      <i class="fa-solid fa-circle-info text-emerald-400 mt-0.5 text-base" id="toast-icon"></i>
+      <div class="flex-1 text-xs">
+        <h4 class="font-bold text-slate-100" id="toast-title">알림</h4>
+        <p class="text-slate-300 text-[11px] mt-0.5" id="toast-message">메시지 내용</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT GAME LOGIC & WEB AUDIO ENGINE -->
+  <script>
+    /* =====================================================================
+     * 1. WEB AUDIO SYNTHESIZER (NO EXTERNAL AUDIO FILES)
+     * ===================================================================== */
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+      }
+      playClick() {
+        if (this.muted) return;
+        this.init();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+      }
+      playSuccess() {
+        if (this.muted) return;
+        this.init();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        const now = this.ctx.currentTime;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + i * 0.08);
+          gain.gain.setValueAtTime(0.2, now + i * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.25);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + i * 0.08);
+          osc.stop(now + i * 0.08 + 0.25);
+        });
+      }
+      playFail() {
+        if (this.muted) return;
+        this.init();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        const now = this.ctx.currentTime;
+        [220, 185, 146.8].forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, now + i * 0.1);
+          gain.gain.setValueAtTime(0.2, now + i * 0.1);
+          gain.gain.linearRampToValueAtTime(0.001, now + i * 0.1 + 0.3);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + i * 0.1);
+          osc.stop(now + i * 0.1 + 0.3);
+        });
+      }
+      toggle() {
+        this.muted = !this.muted;
+        return this.muted;
+      }
+    }
+    const audio = new SoundEngine();
+
+    /* =====================================================================
+     * 2. GAME DATA MODEL: SCENARIOS, QUIZZES, PITFALLS & WINDFALLS
+     * ===================================================================== */
+    const SCENARIOS = [
+      {
+        id: 'HWASEONG_01',
+        region: '경기 화성시 향남읍',
+        title: '왕복 4차선 대로변 완충녹지와 버스정류장의 맹지 함정',
+        category: '전(田) / 자연녹지지역',
+        area: 1650, // sqm
+        price: 420000000,
+        officialPrice: 210000000,
+        season: 'WINTER',
+        description: '겨울철 영하 8도, 4차선 대로변에 넓게 접한 평탄화된 토지입니다. 정면에 버스정류장이 설치되어 있으며 매도인은 "즉시 카페 신축 가능"이라 주장합니다.',
+        mapFeatures: {
+          shape: [{x: 0.15, y: 0.35}, {x: 0.75, y: 0.35}, {x: 0.8, y: 0.85}, {x: 0.2, y: 0.85}],
+          hasBufferGreen: true,
+          hasBusStop: true,
+          hasDitch: false,
+          hasSea: false,
+          contourSlope: 4, // degrees
+          treeDensity: 20 // %
+        },
+        quizzes: [
+          {
+            stage: '임장 및 입지 분석 (1단계)',
+            title: '대로변 접도와 버스정류장 진출입로 판정',
+            risk: 'CRITICAL HAZARD (진출입로 불허)',
+            narrative: '현장 방문 결과 토지 전면이 왕복 4차선 도로에 40m 이상 길게 접해 있으나, 도로와 부지 경계선 사이에 3m 폭의 완충녹지가 지정되어 있고 버스정류장 승강장이 설치되어 있습니다. 이 토지의 개발 인허가 가능성에 대한 냉정한 법적 결론은?',
+            options: [
+              {
+                id: 1,
+                text: '버스정류장은 유동인구 집객에 유리하며, 대로변에 40m나 길게 접해 있으므로 완충녹지 점용허가를 받아 감속차로를 개설하면 건축허가가 무조건 인가된다.',
+                isCorrect: false,
+                reason: '오답: 「도시공원 및 녹지 등에 관한 법률」상 완충녹지는 차량 진출입을 위한 도로점용이 원칙적으로 금지되며, 「도로와 다른 시설의 연결에 관한 규칙」 제6조에 의해 버스정류장 영향권(5~10m) 내 연결허가가 금지됩니다.'
+              },
+              {
+                id: 2,
+                text: '지적도상 완충녹지가 도로와 부지를 가로막고 있어 법적으로 차량 진출입용 도로점용허가가 원천 불가능하며, 버스정류장 승강장 영향권 규제로 인해 대로변에 접했음에도 건축법상 맹지에 해당하여 단독 진입로 개설이 불가능하다.',
+                isCorrect: true,
+                reason: '정답! 완충녹지는 재해방지 및 대기오염 차단을 위한 도시계획시설로 도로점용(진출입로) 허가가 불허됩니다. 또한 버스정류장 전후 일정 구간 역시 도로연결규칙상 진출입로 개설이 금지되므로, 이 토지는 겉만 번지르르한 전형적인 "대로변 맹지"입니다.'
+              },
+              {
+                id: 3,
+                text: '자연녹지지역 내 지목이 전(田)인 토지는 농지법상 주말농장 목적으로 취득 시 완충녹지 해제 신청권이 자동 부여되므로 매수 후 6개월 뒤 진입로를 개설할 수 있다.',
+                isCorrect: false,
+                reason: '오답: 개인의 토지 매수나 농지 취득으로 완충녹지 도시계획시설이 해제되지 않습니다. 해제 입안권은 지자체장의 고유 행정권한입니다.'
+              },
+              {
+                id: 4,
+                text: '겨울철에 단단히 얼어붙은 성토 지반은 지내력(bearing capacity) 검사에서 최상급으로 판정되므로 토목 옹벽 공사비가 전혀 들지 않아 맹지 규제만 풀면 2배의 시세차익이 보장된다.',
+                isCorrect: false,
+                reason: '오답: 겨울철 동결 지반은 봄철 해빙기에 융해되어 심각한 지반 침하가 발생하며, 내부 불법 폐기물 매립 여부도 알 수 없는 매우 위험한 상태입니다.'
+              }
+            ]
+          },
+          {
+            stage: '계약 및 특약 체결 (2단계)',
+            title: '겨울철 동결 폐기물 은폐 및 인허가 불발 방어 특약',
+            risk: 'LEGAL DRAFTING',
+            narrative: '매도인은 자신이 진입로 문제를 해결해 줄 수 있다며 계약금 4,200만 원 입금을 재촉합니다. 매수인이 계약 체결 시 반드시 삽입해야 할 실무 안전장치로 가장 옳은 것은?',
+            options: [
+              {
+                id: 1,
+                text: '민법상 매도인의 하자담보책임은 6개월로 법정화되어 있으므로 별도의 특약 작성 없이 표준계약서만 작성해도 해빙기 폐기물 발견 시 전액 배상을 받는다.',
+                isCorrect: false,
+                reason: '오답: 민법상 하자담보책임은 입증 책임이 매수인에게 있고, 소송에 2~3년이 걸리며 매도인이 재산을 은닉하면 배상받기 극히 어렵습니다.'
+              },
+              {
+                id: 2,
+                text: '특약란에 "본 계약은 매수인이 관할관청으로부터 근린생활시설 건축허가(도로점용 포함)를 득하는 것을 조건으로 하며, 불허가 시 본 계약은 무효로 하고 매도인은 계약금을 즉시 전액 반환한다" 및 "해빙 후 매립 폐기물 발견 시 정화비용은 매도인이 전액 부담한다"는 해제조건부 특약을 명시한다.',
+                isCorrect: true,
+                reason: '정답! 인허가 불발 위험과 겨울철 동결에 따른 지하 폐기물 은폐 위험을 완벽히 방어하기 위해서는 "인허가 조건부 계약 특약" 및 "토양오염·폐기물 원상복구 특약"을 반드시 필수 문구로 넣어야 합니다.'
+              },
+              {
+                id: 3,
+                text: '계약서에 "현 상태로의 매매계약임"이라는 문구를 넣어야 매수인이 취득세를 50% 감면받을 수 있다.',
+                isCorrect: false,
+                reason: '오답: "현 상태 매매" 조항은 매수인의 하자담보책임 추궁권을 포기시키는 독소조항입니다.'
+              },
+              {
+                id: 4,
+                text: '매매대금 중 계약금은 10% 대신 30%를 선지급하여 매도인의 계약 파기(배액배상)를 원천 차단하는 것이 토지 거래의 기본 관례이다.',
+                isCorrect: false,
+                reason: '오답: 리스크가 높은 토지에 과도한 계약금을 먼저 넣는 것은 자금을 장기간 묶이게 하는 위험천만한 행위입니다.'
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'YONGIN_02',
+        region: '경기 용인시 처인구 원삼면',
+        title: '반도체 국가산단 수용과 사유지 비법정 현황도로의 덫',
+        category: '임야(林) / 보전관리지역',
+        area: 3300,
+        price: 750000000,
+        officialPrice: 350000000,
+        season: 'SPRING',
+        description: '인근에 세계 최대 규모 시스템 반도체 클러스터가 조성 중인 지역입니다. 폭 4m 아스콘 포장도로가 접해 있으나 도로대장에는 미등재되어 있습니다.',
+        mapFeatures: {
+          shape: [{x: 0.1, y: 0.2}, {x: 0.9, y: 0.15}, {x: 0.85, y: 0.8}, {x: 0.15, y: 0.75}],
+          hasBufferGreen: false,
+          hasBusStop: false,
+          hasDitch: true,
+          hasSea: false,
+          contourSlope: 19, // slope hazard!
+          treeDensity: 85 // dense tree hazard!
+        },
+        quizzes: [
+          {
+            stage: '인허가 요건 분석 (1단계)',
+            title: '비법정 현황도로와 지자체 산지조례 기준 판정',
+            risk: 'HIGH RISK (조례상 개발불허)',
+            narrative: '지적도상 맹지이나 현장에는 4m 포장도로가 있고 다른 주택들이 통행하고 있습니다. 또한 임야는 약간 경사진 숲을 이루고 있습니다. 인허가 검토 시 직면할 법적 문제는?',
+            options: [
+              {
+                id: 1,
+                text: '이미 다른 주택들이 통행하고 있으므로 사도 소유자의 토지사용승낙서 없이도 건축법상 당연 도로로 인정되며, 경사도는 25도 이하이므로 산지전용이 무조건 가능하다.',
+                isCorrect: false,
+                reason: '오답: 지자체 조례로 지정·공고된 도로관리대장에 등재되지 않은 사유지 현황도로는 신규 건축 시 소유자의 토지사용승낙서가 필수입니다.'
+              },
+              {
+                id: 2,
+                text: '해당 포장도로가 사유지이며 도로대장에 미등재된 경우 사도 소유자의 사용승낙서 없이는 건축허가가 반려되며, 용인시 도시계획조례상 평균경사도(17.5도) 및 입목축적 기준을 초과하면 산지전용허가가 불가능하다.',
+                isCorrect: true,
+                reason: '정답! 비법정 현황도로는 소유자가 막으면 통행 및 굴착 분쟁이 발생하며, 임야 개발 시 지자체별 조례(용인시 17.5도, 표고 등) 기준을 단 1도만 넘어도 전용허가가 나오지 않습니다.'
+              },
+              {
+                id: 3,
+                text: '반도체 산단 수용 예정지 인근 토지는 공익사업법에 따라 모든 인허가 규제가 자동 면제되는 특별구역으로 고시된다.',
+                isCorrect: false,
+                reason: '오답: 산단 인근은 오히려 토지거래허가구역 및 개발행위허가 제한구역으로 묶여 규제가 대폭 강화됩니다.'
+              },
+              {
+                id: 4,
+                text: '보전관리지역 임야는 산지관리법상 공용산지로 분류되어 토목설계사의 서명만 있으면 지자체 도시계획위원회 심의가 생략된다.',
+                isCorrect: false,
+                reason: '오답: 보전관리지역은 환경 보전 성격이 강하여 도시계획위원회 심의가 가장 까다롭습니다.'
+              }
+            ]
+          },
+          {
+            stage: '보유 및 호재/수용 (3단계)',
+            title: '국가산단 토지수용 보상금과 대토보상·이주자택지 권리',
+            risk: 'WINDFALL & TAX STRATEGY',
+            narrative: '보유 중 국토교통부로부터 해당 토지 일부가 반도체 산단 배후 진입도로로 강제 수용된다는 공람공고를 받았습니다. 이때 가장 유리한 보상 및 세무 대책은?',
+            options: [
+              {
+                id: 1,
+                text: '공익사업 토지수용은 100% 비과세이므로 보상금을 현금으로 수령하여 정기예금에 예치하는 것이 무조건 최선이다.',
+                isCorrect: false,
+                reason: '오답: 토지수용도 양도소득세 과세 대상이며, 채권/대토보상에 따른 세액감면(15~40%) 규정이 별도로 존재합니다.'
+              },
+              {
+                id: 2,
+                text: '수용 개시일 전 협의보상 시 감정평가사 추천권을 행사하여 정당한 보상평가를 유도하고, 일정 요건 충족 시 현금 대신 향후 개발될 상업용지나 단독주택용지로 받는 대토보상(또는 이주자택지 딱지) 및 양도세 감면 특례를 검토한다.',
+                isCorrect: true,
+                reason: '정답! 공익사업 수용 시 토지소유자 추천 감정평가사를 통해 정당보상을 도모하고, 현금 외에 미래가치가 높은 조성 토지로 공급받는 대토보상권 및 세액감면(조특법 제77조)을 활용하는 것이 정석입니다.'
+              },
+              {
+                id: 3,
+                text: '수용 통보 즉시 임야에 소나무 5만 그루를 빽빽하게 식재하면 영농보상비를 토지 감정가의 3배로 지급받을 수 있다.',
+                isCorrect: false,
+                reason: '오답: 보상 공고 후 투기성 식재나 지상물 설치는 불법으로 간주되어 보상 대상에서 제외되며 과태료 처분을 받습니다.'
+              },
+              {
+                id: 4,
+                text: '중앙토지수용위원회 이의재결을 거치지 않고 곧바로 청와대 국민청원을 넣으면 법정 보상금의 50%를 프리미엄으로 증액해 준다.',
+                isCorrect: false,
+                reason: '오답: 보상금 증액은 협의 -> 수용재결 -> 이의재결 -> 행정소송(보상금증감청구소송)의 정식 법정 절차를 밟아야 합니다.'
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'YANGPYEONG_03',
+        region: '경기 양평군 서종면 남한강변',
+        title: '북한강 수변구역 규제와 사유지 배수로(오수관로) 부재',
+        category: '대지(垈) / 계획관리지역',
+        area: 990,
+        price: 520000000,
+        officialPrice: 310000000,
+        season: 'SUMMER',
+        description: '남한강을 굽어보는 전망을 갖춘 전원주택 부지입니다. 지목은 대지이며 전면 도로는 시유지 공도(폭 6m)입니다. 여름철 폭우 시 인근 구거의 범람 위험이 있습니다.',
+        mapFeatures: {
+          shape: [{x: 0.2, y: 0.25}, {x: 0.8, y: 0.2}, {x: 0.85, y: 0.75}, {x: 0.15, y: 0.8}],
+          hasBufferGreen: false,
+          hasBusStop: false,
+          hasDitch: true, // ditch across private parcel
+          hasSea: false,
+          contourSlope: 8,
+          treeDensity: 10
+        },
+        quizzes: [
+          {
+            stage: '개발행위 및 건축허가 (1단계)',
+            title: '수변구역 용도제한과 공공하수관로 외 지역 오수방류',
+            risk: 'HARD PITFALL (배수 불통)',
+            narrative: '지목이 대지(垈)이고 6m 공도에 접해 있어 완벽해 보입니다. 매수인은 1층에 브런치 카페(일반음식점)를 차리고 2층에 거주하려 합니다. 인허가청 사전 심사 결과 발생할 수 있는 문제는?',
+            options: [
+              {
+                id: 1,
+                text: '지목이 이미 대지이므로 건축법상 접도의무만 만족하면 오수처리 계획과 무관하게 일반음식점 용도변경 허가가 무조건 즉시 발급된다.',
+                isCorrect: false,
+                reason: '오답: 지목이 대지라도 하수도법 및 한강수계법상 규제를 충족하지 못하면 용도변경 및 증축이 불가합니다.'
+              },
+              {
+                id: 2,
+                text: '한강수계법상 수변구역으로 묶여 있어 외지인의 일반음식점 설치가 엄격히 제한되며, 공공하수처리구역 외 지역에서 개인정화조 방류관로를 매설할 국유 구거가 없고 사유지를 거쳐야 한다면 토지소유자 승낙 없이는 건축허가가 불허된다.',
+                isCorrect: true,
+                reason: '정답! 수변구역 내에서는 일반음식점 신축이 원천 금지되거나 엄격한 거주요건이 필요합니다. 또한 건물 오수를 흘려보낼 구거까지 사유지를 통과해야 한다면 굴착사용승낙서를 받지 못해 건축이 완전히 무산됩니다.'
+              },
+              {
+                id: 3,
+                text: '오수관로가 없더라도 지하 50m로 침투시키는 강제 암반 침투조 방식을 시공하면 수질오염총량제와 무관하게 허가된다.',
+                isCorrect: false,
+                reason: '오답: 지하 암반 침투식 정화조는 지하수 오염을 막기 위해 환경법상 원천 불허됩니다.'
+              },
+              {
+                id: 4,
+                text: '여름철 남한강 홍수위험구역에 포함되어 있더라도 지자체 재난안전과에 침수 포기 각서만 제출하면 건축물대장이 자동 작성된다.',
+                isCorrect: false,
+                reason: '오답: 자연재해위험개선지구에서는 건축법상 방재 기준 미달 시 건축 자체가 승인되지 않습니다.'
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'GANGREUNG_04',
+        region: '강원 강릉시 안목해변 인근',
+        title: '바다 해안선 침식 포락지(浦落地)와 빈지(濱地) 소유권 말소',
+        category: '잡종지 / 생산관리지역',
+        area: 1320,
+        price: 600000000,
+        officialPrice: 280000000,
+        season: 'SUMMER',
+        description: '동해 바닷가 바로 앞 백사장에 붙어 있는 절경의 땅입니다. 오션뷰 호텔이나 풀빌라 부지로 인기가 높으나 파도에 의한 해안 침식이 진행 중입니다.',
+        mapFeatures: {
+          shape: [{x: 0.1, y: 0.3}, {x: 0.7, y: 0.2}, {x: 0.65, y: 0.8}, {x: 0.05, y: 0.7}],
+          hasBufferGreen: false,
+          hasBusStop: false,
+          hasDitch: false,
+          hasSea: true, // coastal foreshore
+          contourSlope: 2,
+          treeDensity: 5
+        },
+        quizzes: [
+          {
+            stage: '지적·물권 분석 (1단계)',
+            title: '해안선 침식으로 인한 포락지와 바닷가 빈지의 법적 성질',
+            risk: 'LAND LOSS FATAL (소유권 소멸)',
+            narrative: '등기부상 면적은 1,320㎡(400평)이나, 현장 확인 시 만조 때 토지의 절반 이상이 바닷물에 잠기고 있습니다. 매도인은 "공부상 소유권이 살아있으니 방파제를 쌓고 매립하면 된다"고 호언장담합니다.',
+            options: [
+              {
+                id: 1,
+                text: '바닷물에 잠기더라도 지적공부상 등록되어 있으면 사유재산권이 영구히 보장되므로 자비로 옹벽을 쌓아 매립하면 토지면적 1,320㎡ 전체를 온전히 인정받는다.',
+                isCorrect: false,
+                reason: '오답: 바다에 잠겨 원상복구가 불가능하거나 과다한 비용이 드는 토지는 법상 포락지로 인정되어 사유권이 영구 소멸합니다.'
+              },
+              {
+                id: 2,
+                text: '최대만조위선 아래로 침식된 토지는 「공간정보의 구축 및 관리 등에 관한 법률」상 "포락지(浦落地)"로 처리되어 지적공부 등록말소 대상이 되며, 종전 소유권이 절대적으로 소멸하여 국유재산(바다)이 되므로 매수 시 면적의 태반을 영구 상실한다.',
+                isCorrect: true,
+                reason: '정답! 바닷물에 잠겨 토지의 효용을 상실한 포락지는 대법원 판례상 종전 소유권이 확정적으로 소멸(절대적 소멸)하며, 다시 흙이 쌓여 육지화되어도 국유재산이 됩니다. 바닷가 빈지(바다와 지적선 사이 백사장) 역시 사유화할 수 없습니다.'
+              },
+              {
+                id: 3,
+                text: '공유수면 관리 및 매립에 관한 법률에 따라 바다에 잠긴 땅은 해양수산부 장관의 묵시적 승낙만으로 사설 해수욕장 허가를 취득할 수 있다.',
+                isCorrect: false,
+                reason: '오답: 공유수면 매립 및 점용은 엄격한 국가 면허 사항입니다.'
+              },
+              {
+                id: 4,
+                text: '포락지는 감정평가 시 바다 조망 프리미엄 300%가 공시지가에 자동 가산되어 지방세법상 재산세가 면제되는 비과세 토지이다.',
+                isCorrect: false,
+                reason: '오답: 말소 대상 포락지는 경제적 가치가 사실상 0으로 추락합니다.'
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'CHUNGNAM_05',
+        region: '충남 아산시 탕정면 인근',
+        title: '지적불부합지 등록과 경계복원측량 시 면적 대폭 축소',
+        category: '답(畓) / 계획관리지역',
+        area: 2000,
+        price: 480000000,
+        officialPrice: 240000000,
+        season: 'AUTUMN',
+        description: '디스플레이 클러스터 배후 주거단지 인근의 토지입니다. 계약 후 잔금 전 경계측량을 의뢰했으나 지적도상 모양과 실제 현황이 일치하지 않는 문제입니다.',
+        mapFeatures: {
+          shape: [{x: 0.25, y: 0.15}, {x: 0.85, y: 0.25}, {x: 0.75, y: 0.85}, {x: 0.15, y: 0.75}],
+          hasBufferGreen: false,
+          hasBusStop: false,
+          hasDitch: true,
+          hasSea: false,
+          contourSlope: 3,
+          treeDensity: 0
+        },
+        quizzes: [
+          {
+            stage: '지적 및 권리 실무 (1단계)',
+            title: '지적재조사 사업 지구 내 지적불부합지 매수의 위험',
+            risk: 'CADASTRAL LOCKUP',
+            narrative: '계약금을 치르고 잔금 전 한국국토정보공사(LX)에 경계복원측량을 의뢰했더니 "본 토지는 실제 점유 현황과 도면이 어긋난 지적불부합지로 측량이 전면 중단된다"는 통보를 받았습니다. 올바른 대처법은?',
+            options: [
+              {
+                id: 1,
+                text: '지적불부합지는 지자체가 알아서 해결해 주므로 잔금을 예정대로 치르고 건물을 착공하면 공사 완료 후 지자체가 경계를 맞춰준다.',
+                isCorrect: false,
+                reason: '오답: 지적불부합지는 경계가 미확정 상태이므로 건축 인허가, 토지 분할, 합병이 전면 불허되어 착공 자체가 불가능합니다.'
+              },
+              {
+                id: 2,
+                text: '지적불부합지 구역은 지적재조사 사업이 완료되어 새로운 경계가 확정될 때까지 건축허가와 경계측량이 보류되며, 재조사 결과 실측 면적이 감소하면 매수인은 막대한 손실을 보게 되므로 잔금 지급을 중단하고 계약을 해제하거나 감액 특약을 체결해야 한다.',
+                isCorrect: true,
+                reason: '정답! 지적재조사 사업은 수년에서 십수 년이 걸릴 수 있으며 완료 시까지 재산권 행사가 묶입니다. 실측 면적이 공부상 면적보다 줄어들 경우 조정금을 정산받더라도 시세에 미치지 못하므로 잔금 전 반드시 계약을 재검토해야 합니다.'
+              },
+              {
+                id: 3,
+                text: '인접 토지 소유자와 주먹다짐을 하여 먼저 깃발을 꽂는 사람이 민법상 선점의 원칙에 따라 점유권을 인정받는다.',
+                isCorrect: false,
+                reason: '오답: 부동산은 무주물 선점의 대상이 아니며 무단 점유는 불법행위입니다.'
+              },
+              {
+                id: 4,
+                text: '지적불부합지 통보서는 형사상 사기죄의 증거가 되므로 매도인을 즉시 구속 수사하도록 대법원에 직권 탄원해야 한다.',
+                isCorrect: false,
+                reason: '오답: 지적불부합은 일제강점기 종이 지적도의 오차로 인한 구조적 문제로 매도인의 사기 행위로 보기 어렵습니다.'
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'SEJONG_06',
+        region: '세종특별자치시 연서면 스마트국가산단 인접',
+        title: '농지처분의무 통지와 매장유산(문화재) 출토 공사 중단',
+        category: '전(田) / 생산녹지지역',
+        area: 2500,
+        price: 820000000,
+        officialPrice: 450000000,
+        season: 'SPRING',
+        description: '세종 스마트 국가산단 확장 예정지 인근 토지입니다. 직장인이 농지취득자격증명을 발급받아 매입했으나 자경을 하지 않아 면사무소 조사를 받게 됩니다.',
+        mapFeatures: {
+          shape: [{x: 0.15, y: 0.2}, {x: 0.8, y: 0.1}, {x: 0.9, y: 0.75}, {x: 0.2, y: 0.85}],
+          hasBufferGreen: false,
+          hasBusStop: true,
+          hasDitch: true,
+          hasSea: false,
+          contourSlope: 5,
+          treeDensity: 15
+        },
+        quizzes: [
+          {
+            stage: '보유·관리 및 세무 (1단계)',
+            title: '농지법상 농지처분의무와 25% 이행강제금 및 중과세',
+            risk: 'TAX & PENALTY BOMB',
+            narrative: '서울 거주 직장인이 매수 후 농사를 짓지 않고 방치하자 면사무소로부터 "농지이용실태조사 결과 자경 미이행으로 1년 이내 처분의무 통지"를 받았습니다. 이 토지의 법적 결말은?',
+            options: [
+              {
+                id: 1,
+                text: '농지처분의무 통지를 받더라도 잔디나 조경수를 심어 주말농장 형태를 갖추면 처분명령이 영구적으로 자동 철회된다.',
+                isCorrect: false,
+                reason: '오답: 꼼수 식재는 현장 실사에서 자경으로 인정받지 못하며 처분명령이 그대로 유지됩니다.'
+              },
+              {
+                id: 2,
+                text: '처분기간 내 미처분 시 지자체장은 매년 감정가 또는 공시지가의 25%에 달하는 무거운 이행강제금을 처분할 때까지 반복 부과하며, 매도 시에도 비사업용 토지로 분류되어 양도소득세 기본세율에 10%p가 중과된다.',
+                isCorrect: true,
+                reason: '정답! 2021년 개정 농지법에 따라 자경하지 않는 농지는 처분명령 후 매년 25%의 이행강제금이 부과됩니다. 4년만 지나면 토지 가액 전체를 벌금으로 날릴 수 있으며, 양도세 역시 비사업용 토지 중과세(기본세율+10%p) 폭탄을 맞습니다.'
+              },
+              {
+                id: 3,
+                text: '농지은행에 위탁 임대하더라도 과거 3년간 자경 실적이 없으면 즉시 검찰에 기소되어 징역형에 처해진다.',
+                isCorrect: false,
+                reason: '오답: 처분의무 통지 전 적법한 취득 농지를 8년 이상 보유하는 등 요건에 따라 농지은행에 위탁할 수 있는 제도가 있습니다.'
+              },
+              {
+                id: 4,
+                text: '농지를 대지로 변경하는 허가를 받지 않고 무단으로 창고를 지어놓으면 5년 후 자동으로 잡종지로 양성화된다.',
+                isCorrect: false,
+                reason: '오답: 불법 농지전용은 형사처벌 및 원상복구 명령 대상입니다.'
+              }
+            ]
+          }
+        ]
+      }
+    ];
+
+    /* =====================================================================
+     * 3. GAME STATE ENGINE
+     * ===================================================================== */
+    const SEASONS = ['봄 (Spring)', '여름 (Summer)', '가을 (Autumn)', '겨울 (Winter)'];
+    const SEASON_KEYS = ['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'];
+
+    const state = {
+      capital: 500000000, // 5억 원
+      debt: 0,
+      year: 1,
+      seasonIndex: 0,
+      activeScenarioIndex: 0,
+      activeQuizIndex: 0,
+      activeLayer: 'cadastral',
+      inspectionDone: { drill: false, survey: false, drone: false },
+      ownedLands: [],
+      historyLogs: [],
+      soundMuted: false
+    };
+
+    /* =====================================================================
+     * 4. GRAPHICAL 2D CADASTRAL CANVAS ENGINE
+     * ===================================================================== */
+    const canvas = document.getElementById('cadastralCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      const parent = canvas.parentElement;
+      canvas.width = parent.clientWidth * window.devicePixelRatio;
+      canvas.height = parent.clientHeight * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      renderMap();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function renderMap() {
+      const scenario = SCENARIOS[state.activeScenarioIndex];
+      const w = canvas.width / window.devicePixelRatio;
+      const h = canvas.height / window.devicePixelRatio;
+
+      // 1. Background (Natural terrain color based on season)
+      const season = SEASON_KEYS[state.seasonIndex];
+      if (season === 'WINTER') {
+        ctx.fillStyle = '#1e293b'; // Cold frost ground
+      } else if (season === 'SUMMER') {
+        ctx.fillStyle = '#064e3b'; // Lush deep green
+      } else {
+        ctx.fillStyle = '#0f172a'; // Neutral terrain
+      }
+      ctx.fillRect(0, 0, w, h);
+
+      // Grid Pattern (Cadastral Coordinates Grid)
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.lineWidth = 1;
+      const step = 40;
+      for (let x = 0; x < w; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let y = 0; y < h; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // 2. Render Adjacent Elements (Roads, Ditches, Sea)
+      const mf = scenario.mapFeatures;
+
+      // SEA / FORESHORE (포락지/빈지)
+      if (mf.hasSea) {
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(w * 0.65, 0, w * 0.35, h);
+        
+        // Sea waves
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 5; i++) {
+          ctx.beginPath();
+          ctx.arc(w * 0.68 + (i * 20), h * 0.3 + (i * 50), 30, -Math.PI/3, Math.PI/3);
+          ctx.stroke();
+        }
+
+        // Coastal boundary line (포락선 - High tide line)
+        ctx.strokeStyle = '#f43f5e';
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(w * 0.65, 0);
+        ctx.lineTo(w * 0.65, h);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = '11px Pretendard';
+        ctx.fillText('최대만조위선 (이하 침식 포락지: 소유권 말소 구역)', w * 0.45, 25);
+      }
+
+      // ROAD (공도 / 4차선 대로 / 현황도로)
+      const roadY = h * 0.15;
+      const roadHeight = 60;
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(0, roadY, w, roadHeight);
+
+      // Road Centerlines
+      ctx.strokeStyle = '#eab308';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([16, 12]);
+      ctx.beginPath();
+      ctx.moveTo(0, roadY + roadHeight / 2);
+      ctx.lineTo(w, roadY + roadHeight / 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Road label
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = 'bold 11px Pretendard';
+      ctx.fillText('왕복 4차선 광로 (시유지 국도 제43호선)', 20, roadY + 22);
+
+      // BUFFER GREEN ZONE (완충녹지)
+      if (mf.hasBufferGreen && (state.activeLayer === 'cadastral' || state.activeLayer === 'regulation')) {
+        const bgY = roadY + roadHeight;
+        const bgHeight = 28;
+
+        // Striped pattern for Buffer Green Zone
+        ctx.fillStyle = 'rgba(22, 163, 74, 0.45)';
+        ctx.fillRect(0, bgY, w, bgHeight);
+        ctx.strokeStyle = '#15803d';
+        ctx.lineWidth = 1.5;
+        for (let x = -bgHeight; x < w; x += 15) {
+          ctx.beginPath();
+          ctx.moveTo(x, bgY + bgHeight);
+          ctx.lineTo(x + bgHeight, bgY);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = '#4ade80';
+        ctx.font = 'bold 11px Pretendard';
+        ctx.fillText('도시계획시설 [완충녹지] - 차량 진출입 도로점용 절대 불허 구간', 20, bgY + 18);
+      }
+
+      // BUS STOP (버스정류장 승강장)
+      if (mf.hasBusStop) {
+        const bsX = w * 0.4;
+        const bsY = roadY + roadHeight - 12;
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath();
+        ctx.roundRect(bsX, bsY, 90, 22, 4);
+        ctx.fill();
+        ctx.strokeStyle = '#60a5fa';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 10px Pretendard';
+        ctx.fillText('🚏 시내버스정류장', bsX + 6, bsY + 15);
+
+        // Connection restriction halo
+        if (state.activeLayer === 'regulation') {
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeRect(bsX - 40, bsY - 10, 170, 42);
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#ef4444';
+          ctx.font = '10px Pretendard';
+          ctx.fillText('도로연결 금지 영향권 (반경 10m)', bsX - 35, bsY + 45);
+        }
+      }
+
+      // DITCH / STREAM (구거)
+      if (mf.hasDitch && (state.activeLayer === 'cadastral' || state.activeLayer === 'infra')) {
+        ctx.fillStyle = 'rgba(2, 132, 199, 0.5)';
+        const ditchY = h * 0.78;
+        ctx.fillRect(0, ditchY, w, 24);
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, ditchY, w, 24);
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '11px Pretendard';
+        ctx.fillText('농업기반시설 [구거 (溝渠)] - 한국농어촌공사 관리 (점용허가 필요)', 20, ditchY + 16);
+      }
+
+      // 3. TARGET LAND PLOT (해당 필지 다각형 그리기)
+      const pts = mf.shape.map(p => ({ x: p.x * w, y: p.y * h }));
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i].x, pts[i].y);
+      }
+      ctx.closePath();
+
+      // Parcel Fill Style by Layer
+      if (state.activeLayer === 'topo') {
+        // Contour / Elevation rendering
+        const grad = ctx.createLinearGradient(pts[0].x, pts[0].y, pts[2].x, pts[2].y);
+        grad.addColorStop(0, '#f59e0b');
+        grad.addColorStop(1, '#78350f');
+        ctx.fillStyle = grad;
+      } else if (state.activeLayer === 'infra') {
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.9)';
+      } else {
+        // Standard Cadastral Fill
+        ctx.fillStyle = season === 'WINTER' ? 'rgba(254, 243, 199, 0.85)' : 'rgba(254, 240, 138, 0.9)';
+      }
+      ctx.fill();
+
+      // Parcel Border
+      ctx.strokeStyle = '#dc2626'; // Cadastral Red line
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Parcel Lot Number & Jimoak Tag (지번/지목 태그)
+      const centerX = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) / 4;
+      const centerY = (pts[0].y + pts[1].y + pts[2].y + pts[3].y) / 4;
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 15px Pretendard';
+      ctx.textAlign = 'center';
+      ctx.fillText(`산 124-3 [${scenario.category.split('/')[0].trim()}]`, centerX, centerY - 8);
+
+      ctx.font = '12px Pretendard';
+      ctx.fillStyle = '#334155';
+      ctx.fillText(`${scenario.area.toLocaleString()}㎡ (${Math.round(scenario.area * 0.3025)}평)`, centerX, centerY + 12);
+
+      // Topography Contours if active
+      if (state.activeLayer === 'topo') {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 1.5;
+        for (let r = 20; r < 120; r += 25) {
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px Pretendard';
+        ctx.fillText(`평균 경사도: ${mf.contourSlope}° / 입목축적: ${mf.treeDensity}%`, centerX, centerY + 35);
+      }
+
+      // Sewage infrastructure lines if active
+      if (state.activeLayer === 'infra') {
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 6]);
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(w * 0.9, h * 0.9);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 11px Pretendard';
+        ctx.fillText('❌ 공공하수관로 직관 단절 (사유지 굴착승낙 필요구간)', centerX + 40, centerY + 50);
+      }
+
+      // Winter Frost Overlay
+      if (season === 'WINTER') {
+        ctx.fillStyle = 'rgba(224, 242, 254, 0.15)';
+        ctx.fill();
+      }
+
+      // Inspection Markers
+      if (state.inspectionDone.drill) {
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(centerX - 50, centerY, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillText('시추공', centerX - 50, centerY - 12);
+      }
+
+      ctx.textAlign = 'start'; // reset
+    }
+
+    /* =====================================================================
+     * 5. UI CONTROLLERS & GAMEPLAY LOOP
+     * ===================================================================== */
+    function formatMoney(amount) {
+      if (amount >= 100000000) {
+        const eok = Math.floor(amount / 100000000);
+        const man = Math.round((amount % 100000000) / 10000);
+        return man > 0 ? `${eok}억 ${man.toLocaleString()}만 원` : `${eok}억 원`;
+      }
+      return `${Math.round(amount / 10000).toLocaleString()}만 원`;
+    }
+
+    function showToast(title, message, isSuccess = true) {
+      const toast = document.getElementById('modal-toast');
+      const icon = document.getElementById('toast-icon');
+      document.getElementById('toast-title').textContent = title;
+      document.getElementById('toast-message').textContent = message;
+      
+      icon.className = isSuccess 
+        ? 'fa-solid fa-circle-check text-emerald-400 mt-0.5 text-base' 
+        : 'fa-solid fa-triangle-exclamation text-rose-400 mt-0.5 text-base';
+
+      toast.classList.remove('opacity-0', 'translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-3');
+      }, 3500);
+    }
+
+    function updateDashboard() {
+      // Header values
+      document.getElementById('capital-display').textContent = formatMoney(state.capital);
+      document.getElementById('debt-display').textContent = `${formatMoney(state.debt)} (DSR ${(state.debt / 800000000 * 100).toFixed(0)}%)`;
+      document.getElementById('land-count-display').textContent = `${state.ownedLands.length}필지`;
+      document.getElementById('header-turn-display').innerHTML = `2026년 ${state.year}년차 · <span class="text-amber-400 font-semibold">${SEASONS[state.seasonIndex]}</span>`;
+
+      // HUD values
+      const current = SCENARIOS[state.activeScenarioIndex];
+      document.getElementById('hud-zoning').textContent = current.category;
+      document.getElementById('hud-area').textContent = `${current.area.toLocaleString()}㎡ (${Math.round(current.area * 0.3025)}평)`;
+      document.getElementById('hud-road').textContent = current.mapFeatures.hasBufferGreen ? '대로변 (완충녹지 저촉)' : '4m 현황도로 접면';
+      
+      const seasonKey = SEASON_KEYS[state.seasonIndex];
+      const seasonNames = { SPRING: '봄 (해빙기 지반 침하 조사)', SUMMER: '여름 (폭우 하천 범람 주의)', AUTUMN: '가을 (농지 수확 및 실태조사)', WINTER: '겨울 (동결 지반 하자 은폐)' };
+      document.getElementById('hud-season-label').textContent = seasonNames[seasonKey];
+      
+      const seasonIcons = {
+        SPRING: '<i class="fa-solid fa-seedling text-emerald-400"></i>',
+        SUMMER: '<i class="fa-solid fa-cloud-showers-heavy text-blue-400"></i>',
+        AUTUMN: '<i class="fa-solid fa-wheat-awn text-amber-400"></i>',
+        WINTER: '<i class="fa-solid fa-snowflake text-cyan-300"></i>'
+      };
+      document.getElementById('hud-season-icon').innerHTML = seasonIcons[seasonKey];
+
+      document.getElementById('current-parcel-title').textContent = `${current.region} (${current.title})`;
+
+      renderMap();
+    }
+
+    function renderActiveQuiz() {
+      const scenario = SCENARIOS[state.activeScenarioIndex];
+      const quiz = scenario.quizzes[state.activeQuizIndex % scenario.quizzes.length];
+
+      document.getElementById('quiz-stage-step').textContent = quiz.stage;
+      document.getElementById('quiz-title').textContent = quiz.title;
+      document.getElementById('quiz-risk-badge').textContent = quiz.risk;
+      document.getElementById('scenario-narrative').textContent = quiz.narrative;
+
+      const container = document.getElementById('quiz-options-container');
+      container.innerHTML = '';
+
+      quiz.options.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'w-full text-left p-3.5 rounded-xl border border-slate-800 bg-slate-900/90 hover:bg-slate-800/90 hover:border-slate-700 transition flex items-start gap-3 group active:scale-[0.99]';
+        btn.innerHTML = `
+          <span class="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center shrink-0 group-hover:border-emerald-500 group-hover:text-emerald-400 font-mono">
+            ${idx + 1}
+          </span>
+          <p class="text-xs text-slate-200 leading-relaxed group-hover:text-white flex-1">${opt.text}</p>
+        `;
+        btn.onclick = () => handleQuizAnswer(opt, quiz);
+        container.appendChild(btn);
+      });
+
+      // Hide feedback box
+      document.getElementById('quiz-feedback-box').classList.add('hidden');
+    }
+
+    function handleQuizAnswer(selectedOption, quiz) {
+      audio.playClick();
+      const feedbackBox = document.getElementById('quiz-feedback-box');
+      const feedbackStatus = document.getElementById('feedback-status');
+      const feedbackBadge = document.getElementById('feedback-badge');
+      const feedbackExpl = document.getElementById('feedback-explanation');
+      const feedbackActions = document.getElementById('feedback-actions');
+
+      feedbackBox.classList.remove('hidden');
+
+      if (selectedOption.isCorrect) {
+        audio.playSuccess();
+        feedbackBox.className = 'bg-emerald-950/40 border border-emerald-500/50 rounded-xl p-4 text-xs space-y-3';
+        feedbackStatus.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400"></i> 판정 성공 (정답)';
+        feedbackStatus.className = 'font-bold text-emerald-300 flex items-center gap-1.5 text-sm';
+        feedbackBadge.className = 'text-[10px] px-2 py-0.5 rounded font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+        feedbackBadge.textContent = '+자본금 방어 및 통찰력 획득';
+        feedbackExpl.textContent = selectedOption.reason;
+
+        // Action buttons
+        feedbackActions.innerHTML = `
+          <button id="btn-buy-land" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs transition flex items-center gap-1">
+            <i class="fa-solid fa-stamp"></i> 특약 첨부 후 계약 체결
+          </button>
+          <button id="btn-next-quiz" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs transition">
+            다음 심층 단계로 진행 <i class="fa-solid fa-arrow-right ml-1"></i>
+          </button>
+        `;
+
+        document.getElementById('btn-buy-land').onclick = () => buyCurrentLand();
+        document.getElementById('btn-next-quiz').onclick = () => advanceQuizStep();
+
+      } else {
+        audio.playFail();
+        feedbackBox.className = 'bg-rose-950/40 border border-rose-500/50 rounded-xl p-4 text-xs space-y-3';
+        feedbackStatus.innerHTML = '<i class="fa-solid fa-circle-xmark text-rose-400"></i> 중대한 공법 판정 착오 (오답)';
+        feedbackStatus.className = 'font-bold text-rose-300 flex items-center gap-1.5 text-sm';
+        feedbackBadge.className = 'text-[10px] px-2 py-0.5 rounded font-mono bg-rose-500/20 text-rose-300 border border-rose-500/30';
+        feedbackBadge.textContent = '인허가 반려 및 매몰 비용 위험';
+        feedbackExpl.textContent = selectedOption.reason;
+
+        // Penalty fee on consultation/mistake
+        state.capital = Math.max(10000000, state.capital - 5000000); // 500만원 설계비/행정심판 손실
+        updateDashboard();
+
+        feedbackActions.innerHTML = `
+          <button id="btn-retry-quiz" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs transition">
+            <i class="fa-solid fa-rotate-left mr-1"></i> 다시 분석하기
+          </button>
+        `;
+        document.getElementById('btn-retry-quiz').onclick = () => renderActiveQuiz();
+      }
+    }
+
+    function advanceQuizStep() {
+      const scenario = SCENARIOS[state.activeScenarioIndex];
+      state.activeQuizIndex = (state.activeQuizIndex + 1) % scenario.quizzes.length;
+      renderActiveQuiz();
+      showToast('단계 진행', '다음 인허가 및 계약 심층 분석 단계로 이동했습니다.');
+    }
+
+    function buyCurrentLand() {
+      const scenario = SCENARIOS[state.activeScenarioIndex];
+      if (state.capital < scenario.price) {
+        showToast('자금 부족', '가용 자본금이 부족하여 토지를 매입할 수 없습니다.', false);
+        return;
+      }
+
+      state.capital -= scenario.price;
+      const newLand = {
+        ...scenario,
+        purchasedYear: state.year,
+        purchasedSeason: SEASONS[state.seasonIndex],
+        currentValue: scenario.price,
+        holdingTurns: 0,
+        civilWorksDone: false
+      };
+      state.ownedLands.push(newLand);
+      audio.playSuccess();
+      showToast('계약 완료', `[${scenario.region}] 토지 취득 계약이 체결되었습니다.`);
+      updateDashboard();
+      renderInventoryList();
+    }
+
+    function renderInventoryList() {
+      const container = document.getElementById('inventory-list-container');
+      const countDisplay = document.getElementById('inventory-summary-text');
+
+      if (state.ownedLands.length === 0) {
+        container.innerHTML = `
+          <div class="p-8 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
+            <i class="fa-solid fa-map text-3xl mb-2 text-slate-600 block"></i>
+            현재 취득하여 보유 중인 토지가 없습니다.<br>
+            매물 목록에서 적절한 땅을 탐색하고 계약을 체결하십시오.
+          </div>
+        `;
+        countDisplay.textContent = '총 보유: 0건 (평가총액: 0원)';
+        return;
+      }
+
+      const totalVal = state.ownedLands.reduce((acc, l) => acc + l.currentValue, 0);
+      countDisplay.textContent = `총 보유: ${state.ownedLands.length}건 (평가총액: ${formatMoney(totalVal)})`;
+
+      container.innerHTML = '';
+      state.ownedLands.forEach((land, idx) => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900 border border-slate-800 p-3.5 rounded-xl space-y-2.5 text-xs';
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-white">${land.region}</span>
+            <span class="text-emerald-400 font-mono font-bold">${formatMoney(land.currentValue)}</span>
+          </div>
+          <div class="text-slate-400 text-[11px] space-y-1">
+            <div class="flex justify-between">
+              <span>취득 시기: ${land.purchasedYear}년차 ${land.purchasedSeason}</span>
+              <span>지목: ${land.category}</span>
+            </div>
+            <div class="flex justify-between">
+              <span>보유 기간: ${land.holdingTurns}분기 경과</span>
+              <span>개발 상태: ${land.civilWorksDone ? '<span class="text-blue-400 font-semibold">토목준공 완료</span>' : '<span class="text-amber-400">원형지 상태</span>'}</span>
+            </div>
+          </div>
+          <div class="pt-2 border-t border-slate-800 flex items-center justify-end gap-2">
+            <button class="btn-civil-work px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] transition" data-index="${idx}">
+              <i class="fa-solid fa-trowel-bricks mr-1 text-amber-400"></i> 토목·정화조 시공 (5천만 원)
+            </button>
+            <button class="btn-sell-land px-2.5 py-1 bg-rose-900/40 hover:bg-rose-800/60 border border-rose-700/50 text-rose-300 rounded text-[11px] transition" data-index="${idx}">
+              매도 처분
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      // Bind buttons
+      document.querySelectorAll('.btn-civil-work').forEach(b => {
+        b.onclick = (e) => {
+          const idx = parseInt(e.currentTarget.dataset.index);
+          doCivilWork(idx);
+        };
+      });
+      document.querySelectorAll('.btn-sell-land').forEach(b => {
+        b.onclick = (e) => {
+          const idx = parseInt(e.currentTarget.dataset.index);
+          sellLand(idx);
+        };
+      });
+    }
+
+    function doCivilWork(index) {
+      const land = state.ownedLands[index];
+      const cost = 50000000;
+      if (state.capital < cost) {
+        showToast('자금 부족', '토목공사비(5,000만 원)가 부족합니다.', false);
+        return;
+      }
+      if (land.civilWorksDone) {
+        showToast('시공 완료', '이미 토목 및 배수정화 시설이 완공된 토지입니다.');
+        return;
+      }
+
+      state.capital -= cost;
+      land.civilWorksDone = true;
+      land.currentValue += Math.round(cost * 1.6); // 1.6x value increase
+      audio.playSuccess();
+      showToast('토목 완공', '토목공사 및 정화시설이 준공되어 토지가치가 상승했습니다.');
+      updateDashboard();
+      renderInventoryList();
+    }
+
+    function sellLand(index) {
+      const land = state.ownedLands[index];
+      // Tax calculation (비사업용 토지 중과세 vs 일반과세)
+      const gain = land.currentValue - land.price;
+      let tax = 0;
+      if (gain > 0) {
+        const isNonBusiness = !land.civilWorksDone && land.holdingTurns < 4;
+        const taxRate = isNonBusiness ? 0.45 : 0.25; // Surcharge
+        tax = Math.round(gain * taxRate);
+      }
+      const netProceeds = land.currentValue - tax;
+      state.capital += netProceeds;
+      state.ownedLands.splice(index, 1);
+      audio.playSuccess();
+      showToast('매도 완료', `토지를 매도하여 ${formatMoney(netProceeds)}을 정산받았습니다. (양도세: ${formatMoney(tax)})`);
+      updateDashboard();
+      renderInventoryList();
+    }
+
+    function renderMarketList() {
+      const container = document.getElementById('market-list-container');
+      container.innerHTML = '';
+
+      SCENARIOS.forEach((sc, idx) => {
+        const item = document.createElement('div');
+        const isActive = idx === state.activeScenarioIndex;
+        item.className = `p-3.5 rounded-xl border text-xs cursor-pointer transition ${
+          isActive 
+            ? 'bg-slate-900 border-emerald-500 shadow-md ring-1 ring-emerald-500/30' 
+            : 'bg-slate-900/60 border-slate-800 hover:bg-slate-800/80'
+        }`;
+        item.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-100">${sc.region}</span>
+            <span class="font-mono text-emerald-400 font-bold">${formatMoney(sc.price)}</span>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1 line-clamp-1">${sc.title}</p>
+          <div class="flex items-center justify-between text-[10px] text-slate-500 mt-2 font-mono">
+            <span>면적: ${sc.area}㎡</span>
+            <span>${sc.category}</span>
+          </div>
+        `;
+        item.onclick = () => {
+          state.activeScenarioIndex = idx;
+          state.activeQuizIndex = 0;
+          state.inspectionDone = { drill: false, survey: false, drone: false };
+          updateDashboard();
+          renderActiveQuiz();
+          renderMarketList();
+          audio.playClick();
+        };
+        container.appendChild(item);
+      });
+    }
+
+    /* =====================================================================
+     * 6. TURN PROGRESSION & RANDOM EVENTS (WINDFALLS / PITFALLS)
+     * ===================================================================== */
+    const RANDOM_EVENTS = [
+      {
+        type: 'WINDFALL',
+        title: '🎉 3기 신도시 및 공공택지지구 편입 (토지수용 통보)',
+        desc: '국토교통부 고시로 보유 토지가 국가 공공주택지구로 지정되었습니다! 감정평가 결과 공시지가 대비 180%의 정당보상금과 함께 협의양도인 단독주택용지(이주자택지 딱지) 우선 분양권이 배정되었습니다.',
+        impact: (lands) => {
+          if (lands.length === 0) return { money: 0, text: '보유 토지가 없어 수용 혜택을 받지 못했습니다.' };
+          const target = lands[0];
+          const bonus = Math.round(target.currentValue * 0.45);
+          target.currentValue += bonus;
+          state.capital += bonus;
+          return { money: bonus, text: `수용 보상금 및 프리미엄 +${formatMoney(bonus)} 수령!` };
+        }
+      },
+      {
+        type: 'WINDFALL',
+        title: '🚀 자연녹지지역 → 제2종일반주거지역 종상향',
+        desc: '도시기본계획 재정비 고시로 보유 토지의 용도지역이 종상향되었습니다! 건폐율이 20%에서 60%로, 용적률이 100%에서 250%로 2.5배 확대되어 토지 가치가 급등합니다.',
+        impact: (lands) => {
+          if (lands.length === 0) return { money: 0, text: '보유 토지가 없습니다.' };
+          const target = lands[0];
+          const increase = Math.round(target.currentValue * 0.6);
+          target.currentValue += increase;
+          return { money: increase, text: `용적률 상향으로 토지 가치 +${formatMoney(increase)} 폭등!` };
+        }
+      },
+      {
+        type: 'PITFALL',
+        title: '⚠️ 여름철 기습 폭우로 하천 범람 및 토사 붕괴',
+        desc: '시간당 90mm의 기록적 폭우로 인근 구거가 범람하여 부지 내 성토 사면이 붕괴되었습니다. 관할 지자체로부터 재해복구 명령이 하달되어 긴급 옹벽 보강 토목공사비가 발생했습니다.',
+        impact: (lands) => {
+          const cost = 25000000;
+          state.capital = Math.max(0, state.capital - cost);
+          return { money: -cost, text: `긴급 수해 복구 공사비 -${formatMoney(cost)} 지출` };
+        }
+      },
+      {
+        type: 'PITFALL',
+        title: '📜 매장유산 유존지역 시굴조사 및 공사중지 명령',
+        desc: '굴착 터파기 공사 중 백제 시대 토기 파편과 주거지 흔적이 출토되었습니다! 국가유산청에 의해 공사가 전면 중단되고 정밀발굴조사가 결정되어 금융이자 부담이 발생합니다.',
+        impact: (lands) => {
+          const loss = 20000000;
+          state.capital = Math.max(0, state.capital - loss);
+          return { money: -loss, text: `정밀발굴조사 대기 금융비용 -${formatMoney(loss)} 손실` };
+        }
+      },
+      {
+        type: 'PITFALL',
+        title: '🚨 무단점유 종중의 분묘기지권 주장 소송',
+        desc: '매수한 임야 깊숙한 곳에서 잡목에 가려져 있던 30년 된 암장 분묘 2기가 발견되었습니다. 종중회가 분묘기지권을 주장하며 굴이장을 거부하여 명도 소송비용이 발생했습니다.',
+        impact: (lands) => {
+          const legalFee = 15000000;
+          state.capital = Math.max(0, state.capital - legalFee);
+          return { money: -legalFee, text: `분묘기지권 소송 및 이장합의금 -${formatMoney(legalFee)} 지출` };
+        }
+      }
+    ];
+
+    function advanceTurn() {
+      audio.playClick();
+      state.seasonIndex++;
+      if (state.seasonIndex >= 4) {
+        state.seasonIndex = 0;
+        state.year++;
+      }
+
+      // Age owned lands & charge holding property tax
+      let holdingTax = 0;
+      state.ownedLands.forEach(land => {
+        land.holdingTurns++;
+        const tax = Math.round(land.currentValue * 0.002); // 0.2% property tax per quarter
+        holdingTax += tax;
+      });
+      state.capital = Math.max(0, state.capital - holdingTax);
+
+      // Trigger random event
+      const event = RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
+      const res = event.impact(state.ownedLands);
+
+      // Show Event Modal
+      const modal = document.getElementById('modal-event');
+      const title = document.getElementById('event-title');
+      const desc = document.getElementById('event-description');
+      const delta = document.getElementById('event-financial-impact');
+
+      title.innerHTML = event.title;
+      desc.textContent = event.desc;
+      delta.innerHTML = `
+        <div class="flex justify-between text-slate-300">
+          <span>분기 보유세 정산:</span>
+          <span class="text-rose-400">-${formatMoney(holdingTax)}</span>
+        </div>
+        <div class="flex justify-between text-white font-bold">
+          <span>사건 재무 변동:</span>
+          <span class="${res.money >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${res.text}</span>
+        </div>
+      `;
+
+      modal.classList.remove('hidden');
+      updateDashboard();
+      renderInventoryList();
+    }
+
+    /* =====================================================================
+     * 7. MINI INSPECTION TOOLS
+     * ===================================================================== */
+    document.getElementById('tool-drill').onclick = () => {
+      audio.playClick();
+      state.inspectionDone.drill = true;
+      renderMap();
+      showToast('시추봉 조사 완료', '지표면 아래 1.5m 지점에서 매립 폐기물과 암반 층을 식별했습니다.');
+      updateInspectionText();
+    };
+    document.getElementById('tool-survey').onclick = () => {
+      audio.playClick();
+      state.inspectionDone.survey = true;
+      renderMap();
+      showToast('경계측량 확인', '인접 도로와의 실제 점유 경계선 오차를 확인했습니다.');
+      updateInspectionText();
+    };
+    document.getElementById('tool-drone').onclick = () => {
+      audio.playClick();
+      state.inspectionDone.drone = true;
+      renderMap();
+      showToast('드론 스캔 완료', '3차원 지형 정밀 등고선 및 평균 경사도를 측량했습니다.');
+      updateInspectionText();
+    };
+
+    function updateInspectionText() {
+      const count = Object.values(state.inspectionDone).filter(Boolean).length;
+      document.getElementById('inspection-count-text').textContent = `조사 진행률: ${count}/3 완료`;
+    }
+
+    /* =====================================================================
+     * 8. CODEX / ENCYCLOPEDIA (공법 백과사전 내용 렌더링)
+     * ===================================================================== */
+    const CODEX_ARTICLES = [
+      {
+        tag: '도로 및 접도의무',
+        title: '완충녹지와 현황도로의 치명적 맹지 함정',
+        content: `
+          <strong>1. 완충녹지 (도시공원 및 녹지 등에 관한 법률)</strong><br>
+          대로변에 수십 미터 접해 있어도 지적도상 초록색 줄무늬 완충녹지가 가로막고 있다면, 원칙적으로 차량 진출입을 위한 도로점용허가가 영구히 금지됩니다. 측도나 후면 이면도로가 없다면 건축이 불가능한 '법적 맹지'입니다.<br><br>
+          <strong>2. 비법정 현황도로와 토지사용승낙서</strong><br>
+          아스팔트로 포장되어 주민들이 수십 년간 다닌 길이라도, 지자체 도로관리대장에 등재되어 있지 않은 사유지라면 신규 건축 인허가 시 사도 소유자의 토지사용승낙서가 필수입니다. 소유자가 거부하거나 수억 원을 요구하면 건축이 무산됩니다.
+        `
+      },
+      {
+        tag: '인프라 및 환경',
+        title: '하수처리구역 외 오수배출과 국유 구거 점용',
+        content: `
+          <strong>1. 오수관로 직관 단절 리스크</strong><br>
+          건축물에서 발생하는 생활하수는 법정 방류구(공공하수관로 또는 자연구거)로 흘려보내야 합니다. 부지와 공공하수관 사이에 타인 사유지가 끼어 있다면 지하 매설을 위한 사유지 굴착 동의를 받지 못해 인허가가 최종 반려됩니다.<br><br>
+          <strong>2. 한국농어촌공사 관리 구거(도랑)</strong><br>
+          도로와 부지 사이에 도랑(구거)이 흐르는 경우 다리를 놓거나 복개하여 진입로를 내려면 '농업기반시설 목적 외 사용승인'을 받아야 합니다. 매도인이 불법 복개해 둔 구거를 무턱대고 샀다가는 원상복구 명령을 받게 됩니다.
+        `
+      },
+      {
+        tag: '임야 및 지형',
+        title: '경사도·입목축적도와 겨울철 동결 은폐',
+        content: `
+          <strong>1. 지자체 도시계획조례상 경사도</strong><br>
+          눈으로 완만해 보여도 수치지형도 정밀 CAD 분석 결과 조례 기준(통상 15도~18도)을 단 1도만 초과해도 산지전용이 원천 차단됩니다.<br><br>
+          <strong>2. 겨울철 동결 착시 현상</strong><br>
+          겨울철 영하 날씨에는 땅속에 묻힌 불법 건설폐기물, 축사 악취, 배수 불량 물고임 흔적이 얼어붙어 보이지 않습니다. 봄철 해빙기가 되면 지반 침하와 함께 막대한 토양정화 비용(수억 원)이 매수인에게 청구됩니다.
+        `
+      },
+      {
+        tag: '세무 및 농지법',
+        title: '농지처분의무와 비사업용 토지 10%p 중과세',
+        content: `
+          <strong>1. 25% 이행강제금</strong><br>
+          농지를 취득하고 자경하지 않다가 적발되면 1년 내 처분의무 통지가 나오며, 불응 시 매년 공시지가의 25%가 이행강제금으로 부과됩니다. 4년이면 토지 가격 전체가 과태료로 증발합니다.<br><br>
+          <strong>2. 비사업용 토지 양도세 중과</strong><br>
+          자경하지 않는 농지, 산림경영 없는 임야, 나대지는 비사업용 토지로 분류되어 기본세율(6~45%)에 10%p가 가산되며 장기보유특별공제가 대폭 배제됩니다.
+        `
+      }
+    ];
+
+    function renderCodex() {
+      const container = document.getElementById('codex-content');
+      container.innerHTML = '';
+      CODEX_ARTICLES.forEach(art => {
+        const item = document.createElement('div');
+        item.className = 'bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5';
+        item.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">${art.tag}</span>
+          </div>
+          <h4 class="text-xs font-bold text-white mt-1">${art.title}</h4>
+          <p class="text-slate-300 text-[11px] leading-relaxed pt-1">${art.content}</p>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    /* =====================================================================
+     * 9. EVENT LISTENERS & INITIALIZATION
+     * ===================================================================== */
+    // Nav Tabs
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+      tab.onclick = (e) => {
+        audio.playClick();
+        document.querySelectorAll('.nav-tab').forEach(t => {
+          t.classList.remove('active', 'border-emerald-500', 'text-emerald-400');
+          t.classList.add('border-transparent', 'text-slate-400');
+        });
+        const current = e.currentTarget;
+        current.classList.add('active', 'border-emerald-500', 'text-emerald-400');
+        current.classList.remove('border-transparent', 'text-slate-400');
+
+        const view = current.dataset.view;
+        document.getElementById('view-quiz').classList.add('hidden');
+        document.getElementById('view-inventory').classList.add('hidden');
+        document.getElementById('view-market').classList.add('hidden');
+        document.getElementById(`view-${view}`).classList.remove('hidden');
+
+        if (view === 'inventory') renderInventoryList();
+        if (view === 'market') renderMarketList();
+      };
+    });
+
+    // Layer Toggles
+    document.querySelectorAll('.layer-toggle').forEach(btn => {
+      btn.onclick = (e) => {
+        audio.playClick();
+        document.querySelectorAll('.layer-toggle').forEach(b => {
+          b.classList.remove('active', 'bg-slate-800', 'text-emerald-400', 'border-emerald-500/40');
+          b.classList.add('bg-slate-800/60', 'text-slate-400', 'border-slate-700');
+        });
+        const cur = e.currentTarget;
+        cur.classList.add('active', 'bg-slate-800', 'text-emerald-400', 'border-emerald-500/40');
+        cur.classList.remove('bg-slate-800/60', 'text-slate-400', 'border-slate-700');
+        state.activeLayer = cur.dataset.layer;
+        renderMap();
+      };
+    });
+
+    // Turn button
+    document.getElementById('btn-advance-turn').onclick = () => advanceTurn();
+
+    // Event modal confirm
+    document.getElementById('btn-event-confirm').onclick = () => {
+      audio.playClick();
+      document.getElementById('modal-event').classList.add('hidden');
+    };
+
+    // Sound toggle
+    document.getElementById('btn-mute').onclick = () => {
+      const isMuted = audio.toggle();
+      const icon = document.getElementById('sound-icon');
+      if (isMuted) {
+        icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+      } else {
+        icon.className = 'fa-solid fa-volume-high text-emerald-400';
+        audio.playClick();
+      }
+    };
+
+    // Codex modal open/close
+    document.getElementById('btn-codex').onclick = () => {
+      audio.playClick();
+      renderCodex();
+      document.getElementById('modal-codex').classList.remove('hidden');
+    };
+    document.querySelectorAll('.close-modal').forEach(b => {
+      b.onclick = (e) => {
+        const modalId = e.currentTarget.dataset.modal;
+        document.getElementById(modalId).classList.add('hidden');
+      };
+    });
+
+    // PWA Install Prompt handling
+    let deferredPrompt = null;
+    const btnInstall = document.getElementById('btn-install-pwa');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      btnInstall.classList.remove('hidden');
+      btnInstall.classList.add('flex');
+    });
+
+    btnInstall.onclick = async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          btnInstall.classList.add('hidden');
+        }
+        deferredPrompt = null;
+      }
+    };
+
+    // Dynamic Manifest & Service Worker Blob Registration for PWA Compliance
+    (function registerPWA() {
+      // Manifest
+      const manifest = {
+        name: "토지 악재와 호재: 땅 투자의 신",
+        short_name: "땅투자의신",
+        start_url: window.location.href,
+        display: "standalone",
+        background_color: "#0f172a",
+        theme_color: "#0f172a",
+        icons: [
+          {
+            src: "https://placehold.co/192x192/0f172a/10b981?text=LAND",
+            sizes: "192x192",
+            type: "image/png"
+          },
+          {
+            src: "https://placehold.co/512x512/0f172a/10b981?text=LAND",
+            sizes: "512x512",
+            type: "image/png"
+          }
+        ]
+      };
+      const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+      const manifestURL = URL.createObjectURL(manifestBlob);
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = manifestURL;
+      document.head.appendChild(link);
+
+      // Service Worker (Blob)
+      if ('serviceWorker' in navigator) {
+        const swCode = `
+          self.addEventListener('install', e => self.skipWaiting());
+          self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+          self.addEventListener('fetch', e => {
+            // Passthrough offline cache handler
+            e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+          });
+        `;
+        const swBlob = new Blob([swCode], { type: 'application/javascript' });
+        const swURL = URL.createObjectURL(swBlob);
+        navigator.serviceWorker.register(swURL).catch(() => {
+          // SW registered in sandbox
+        });
+      }
+    })();
+
+    // Bootstrapping the Game on Load
+    window.onload = () => {
+      resizeCanvas();
+      updateDashboard();
+      renderActiveQuiz();
+      renderMarketList();
+      showToast('게임 시작', '실전 토지 시뮬레이터에 오신 것을 환영합니다.');
+    };
+  </script>
+</body>
+</html>
